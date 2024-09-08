@@ -1,0 +1,15 @@
+BrainMaster Discovery Session Wizard Control File
+VERSION: 1
+NAME: 5-minutes EO and EC 
+COM: Use with Discovery 24E
+
+NCHANS:	4
+
+DO:
+MESG1: Prepare for 5 minutes eyes open
+EYES OPEN
+PERIOD: 300
+MESG1: Prepare for 5 minutes eyes closed
+EYES CLOSED
+PERIOD: 300
+DONE:
