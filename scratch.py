@@ -8,6 +8,68 @@ import numpy as np
 import math
 from scipy.fft import fft
 
+# x =1
+# y =2
+
+# def add (x,y):
+#     return x+y
+
+# print(add(x,y))
+thistype = "Knife"
+weapontype = ['Knife',"Katana","Bat"]
+for id, type in enumerate (weapontype):
+    print(id, type)
+    if(type == weapontype[id]):
+        print()
+
+
+
+# x = "kai"
+# y = "moo"
+# z = "kai"
+
+# if x ==y:
+#     print("same")
+# if x ==z:
+#     print("same")
+
+# if x ==z:
+#     print("same")
+# elif (x==z):
+#     print("same wa")
+# elif (x==z):
+#     print("same wa")
+# else:
+#     print("Por mung")
+
+# if(x in y): # i =0,
+#     print(x) 
+
+
+# x = ["Knife",'Katana']
+
+# for i in x:
+#     if(x in y): # i =0,
+#         print(x) 
+
+
+
+
+# band_freqs = {
+#             "delta": (0.5, 3),
+#             "theta": (3, 8),
+#             "alpha": (8, 12),
+#             "beta": (12, 30),
+#             "gamma": (30, 45)
+#         }
+# # for i in band_freqs.values():  # value
+# #     print(i)
+
+# for band in band_freqs:  # name
+#     print(band)
+#     print(band_freqs.get(band)) # value
+
+
 # interval= [[123,31424]]
 # x=np.multiply(interval,256)
 # print(x)
@@ -18,18 +80,71 @@ from scipy.fft import fft
 # rounding_factor = 10 ** digit  # 1000
 # rounded_num = math.ceil(num / rounding_factor) * rounding_factor
 # print(rounded_num)
-# ---------------------------------------
-raw = mne.io.read_raw_edf("data/Subject15_11_4_2022/Subject15_11_4_2022 01.001.01  EO.edf")
-# # raw.plot(block=True)
+# # ---------------------------------------
+# raw = mne.io.read_raw_edf("data/Subject15_11_4_2022/Subject15_11_4_2022 01.001.01  EO.edf")
+# # # raw.plot(block=True)
+
+# # SAMPLING_FREQUENCY   = raw.info['sfreq']
+# CROP_LENGTH = 10 # seconds
+# # CROP
+# data, times = raw[:, 0:(CROP_LENGTH * raw.info['sfreq'])]
+
+# CHANNEL_SELECTED = 0
+# Select Channel
+# channel_data = data[ CHANNEL_SELECTED ][:]
+# # Compute the FFT
+# fftdata = fft(channel_data)
+
+# # Generate frequency bins   #   FFT window     sample spacing 1/f
+# fft_freq = np.fft.fftfreq(channel_data.size, d= 1/raw.info['sfreq']) 
+
+# positive_freqs = fft_freq > 0  # Boolean mask for positive frequencies
+# fftdata_positive = np.abs(fftdata[positive_freqs])  # Magnitude of the FFT for positive frequencies
+# fft_freq_positive = fft_freq[positive_freqs]
+
+# print(raw.ch_names)
+# plt.figure()
+# plt.plot(fft_freq_positive, fftdata_positive)
+# plt.title("FFT Magnitude")
+# plt.xlabel("Freq")
+# plt.ylabel("Magnitude")
+# plt.show()
+# num_ch=len(raw.ch_names)
+
+# fig, axs = plt.subplots(num_ch, 1, figsize=(10, 3 * num_ch))
+
+# for idx, channel_name in enumerate(raw.ch_names):
+
+#     channel_data = data[idx][:]
+
+#     fftdata = fft(channel_data)
+    
+#     fft_freq = np.fft.fftfreq(channel_data.size, d=1/raw.info['sfreq'])
+
+#     positive_freqs = fft_freq > 0
+#     fftdata_positive = np.abs(fftdata[positive_freqs])
+#     fft_freq_positive = fft_freq[positive_freqs]
+
+#     # Plot in the corresponding subplot
+#     axs[idx].plot(fft_freq_positive, fftdata_positive)
+#     axs[idx].set_title(f"FFT Magnitude: {channel_name}")
+#     axs[idx].set_xlabel("Frequency (Hz)")
+#     axs[idx].set_ylabel("Magnitude")
+
+# plt.tight_layout()
+# plt.show()
+
+# for i in raw.ch_names:
+#     print(i)
+#     plt.figure()
+#     plt.plot(fft_freq_positive, fftdata_positive)
+#     plt.title("FFT Magnitude")
+#     plt.xlabel("Freq")
+#     plt.ylabel("Magnitude")
+#     plt.show()
 
 
-# SAMPLING_FREQUENCY   = raw.info['sfreq']
-CROP_LENGTH = 10 # seconds
-# CROP
-data, times = raw[:, 0:(CROP_LENGTH * raw.info['sfreq'])]
-print(data[1][:])
-fftdata = fft(data[1][:])
-print(fftdata.shape)
+
 
 # # # FULL LENGTH
 # data, times = raw[:, :]
