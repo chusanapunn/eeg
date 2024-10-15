@@ -1,6 +1,6 @@
 import sys
 from PyQt5.QtWidgets import QApplication
-from utils.preprocessing import MainWindow
+from utils.mainslicer import MainWindow
 
 def main():
     app = QApplication([])

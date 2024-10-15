@@ -16,9 +16,9 @@ def roundup_datapoint( num ): # (digit - 1) (1230 -> 1300) (4->3)
     
     return rounded_num
 
-def group_number_slices(arr):
+def group_number(arr):
     # Grouping number slice
-    slice_baseline = []
+    interval = []
     start = arr[0]  # always the first index
     stop = arr[0]
     # print("start",start)
@@ -27,15 +27,16 @@ def group_number_slices(arr):
         # print(arr[i],arr[i-1])
         if (arr[i]==arr[i-1]+1): # continuous
             stop = arr[i]                 # shift stopping point
-        else:                                      # breaking point
-            slice_baseline.append([start,stop])    # append slice
+        else: # breaking point                             
+            interval.append([start-1,stop])    # append slice
             start = arr[i]                # move starting point
-            if i == len(arr)-1:           # enough index point?
-                # stop = arr[i+1]
-                slice_baseline.append([start,stop])    # append last slice
+            # if i == len(arr)-1:           # enough index point?
+            #     # stop = arr[i+1]
+            #     interval.append([start,stop])    # append last slice
             stop = arr[i]
-    slice_baseline.append((start,stop))
-    return slice_baseline
+    interval.append((start-1,stop))
+    print(interval)
+    return interval
 
 def convert_datetime_sample( time_value, fs):
     if isinstance(time_value, datetime.datetime) or isinstance(time_value, datetime.time) :
@@ -48,8 +49,7 @@ def convert_timescale(interval,fs):
     # Modify : Trigger to time scale
     second = np.multiply(interval,.5) # In Second
     # length = second[0][1]-second[0][0]
-    interval_datapoint = np.multiply(second,fs) # Raw fs
-
+    interval_datapoint = np.multiply(second,fs).astype(int) # Raw fs
     # print("### ", segment," IsExtend?", self.segmentExtend)
     # print("Trigger Interval:", interval)
     # print("Time (second)   :", second,"## Length :", length, " second")

@@ -2,10 +2,16 @@ from PyQt5.QtWidgets import  QPushButton, QVBoxLayout ,QWidget, QTableWidget, QT
 
 segmentWindow = None
 compareWindows = {}
+segmentWindows= {}
+segmentTable = None
 
 # SEGMENT & METRICS COMPARE WINDOW ######################################
 def showSegmentTable(patientsegments, subject_id):
-    global segmentWindow
+    global segmentWindow, segmentWindows
+
+    if subject_id in segmentWindows:
+        segmentWindows[subject_id].close()
+        del segmentWindows[subject_id]
 
     layout = QVBoxLayout()
     segmentWindow = QWidget()
@@ -14,18 +20,21 @@ def showSegmentTable(patientsegments, subject_id):
             "Band Ratios","Amplitude Asymmetry","Phase Lag", "Coherence", "Interval list", "Interval count", "Interval length (Second)" ,'Expand Info']
     
     seg_col_key = ['segment_data', 'is_extend', 'absolute_power','relative_power','band_ratios',
-             'amplitude_asymmetry', 'phase_lag', 'coherence',  'interval_list', 'interval_count', 'interval_length']
+            'amplitude_asymmetry', 'phase_lag', 'coherence',  'interval_list', 'interval_count', 'interval_length']
     
     col_length = len(segmenttable_col)
     segmentTable = QTableWidget(len(patientsegments), col_length)
+    segmentTable.setHorizontalHeaderLabels( segmenttable_col )
 
     segmentWindow.setWindowTitle(f"Subject: {subject_id} Segments Table")
     segmentWindow.setGeometry(100, 100, 1400, len(patientsegments)*56)
-    segmentTable.setHorizontalHeaderLabels( segmenttable_col )
+
+    
     layout.addWidget(segmentTable)
     segmentWindow.setLayout(layout)
     segmentWindow.show()
 
+    segmentWindows[subject_id] = segmentWindow 
 
 
     # SEGMENT ROW
