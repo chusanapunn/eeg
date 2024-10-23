@@ -5,7 +5,7 @@ from utils.mainslicer import MainWindow
 def main():
     app = QApplication([])
     appwindow = MainWindow()
-    appwindow.show()
+    appwindow.show() 
     sys.exit(app.exec_())
 
 if __name__ == "__main__":

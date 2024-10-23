@@ -1,13 +1,9 @@
 import os
-import numpy as np
 import json
-import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QFileDialog, QMessageBox
 )
-from PyQt5.QtCore import Qt
 
 class EEGSegmentPlotter(QWidget):
     def __init__(self):
@@ -16,7 +12,7 @@ class EEGSegmentPlotter(QWidget):
     
     def init_ui(self):
         self.setWindowTitle("EEG Segment JSON Plotter")
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(100, 100, 240, 160)
 
         # Layout
         layout = QVBoxLayout()
@@ -60,8 +56,10 @@ class EEGSegmentPlotter(QWidget):
         # print(json_obj['data'])
 
         data = [list(x) for x in zip(*json_obj['data'])]
+        
         plt.figure(figsize=(12, 6))
         plt.plot(json_obj['times'], data)
+        plt.title(json_path)
         plt.show()
 
 if __name__ == "__main__":

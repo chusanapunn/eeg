@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import PyQt5.QtWidgets as QtWidgets
 from PyQt5.QtWidgets import QMainWindow, QFileDialog, QPushButton, QComboBox, QVBoxLayout, QHBoxLayout,QLabel,QWidget, QDoubleSpinBox, QTableWidget, QTableWidgetItem, QLineEdit           
-from utils import QEEGPatient, misc, segmentWindow, searchWindow
+from utils import QEEGPatient, misc, segmentWindow
 import json
 
 settingWindow = None
@@ -23,21 +23,23 @@ class MainWindow(QMainWindow):
 
         self.SAMPLING_FREQUENCY = 256 # per second
         self.STRESS_QUADRANT_OFFSET = 1 # seconds
-        self.STRESS_SLICE_OFFSET = 0.5 # seconds
-        # self.OVERLAPPING = 0 # percentage
-        self.segmentExtend = True # slide Q segment Extend?
+        self.STRESS_SUBSEGMENT_OFFSET = 0.5 # seconds
+        self.OVERLAPPING = 0 # percentage
+        # self.segmentExtend = True # slide Q segment Extend?
         # self.plottingSegment = False # plot segment plot?
         self.ylimit = 5e-4
 
         self.edf_file_path = None
         self.excel_file_path = None
         self.save_folder_path = None
+        self.subjectsfolder  = None
 ################################################################################################
         self.raw = None
         self.trigger = None
-
+        self.minStressLength = float("inf") # ensure any valid length is smaller
         self.patient_data = {}
         self.trigger_data = {}
+        self.windowWidth = None
 
         self.currentPatient = None
         self.patientNo = 0
@@ -48,30 +50,26 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout()
         button_layout = QHBoxLayout()
         
-        self.uploadSubjectsFolder = QPushButton("Upload Subjects Folder", self)
-        # self.excel_upload_btn = QPushButton("Upload Excel File", self)
-        # self.baseline_btn = QPushButton("Baseline", self)
-        # self.simulation_btn = QPushButton("Simulation", self)
-        # self.slice_all_btn = QPushButton("Slice All",self)
-        # self.Q1_btn = QPushButton("Quadrant1", self)
-        # self.Q2_btn = QPushButton("Quadrant2", self)
-        # self.Q3_btn = QPushButton("Quadrant3", self)
-        # self.Q4_btn = QPushButton("Quadrant4", self)
-        # self.floss_btn = QPushButton("Floss", self)
+        self.SubjectsFolder = QPushButton("Upload Subjects Folder", self)
+        self.selectSaveFolder = QPushButton("Select Export Folder", self)
         self.setting_btn = QPushButton("Setting", self)
-        self.Extend_btn = QPushButton("Q-Extend")
-        self.QUADRANT_OFFSET_spinbox = QDoubleSpinBox()
-        # self.ylimit_label = QLabel("Ylimit",self)
-        # self.plotylimit_spinbox = QDoubleSpinBox(self)
-        # self.overlapping_label = QLabel("Overlapping Window %:",self)
-        # self.overlapping_spinbox = QDoubleSpinBox(self)
 
-        self.confirm_btn = QPushButton("Start Sliding", self)
+        self.extendQ_label = QLabel("Q-Extend Offset")
+        self.QUADRANT_OFFSET_spinbox = QDoubleSpinBox()
+        self.extendSS_label = QLabel("S/NS SubSegment-Extend Offset")
+        self.SUBSEGMENT_OFFSET_spinbox = QDoubleSpinBox()
+        self.LABEL_OFFSETQ = QLabel(f"Quadrant Offset Value : {self.STRESS_QUADRANT_OFFSET}")
+        self.LABEL_OFFSETSS = QLabel(f"Subsegment Offset Value : {self.STRESS_SUBSEGMENT_OFFSET}")
+        self.LABEL_WindowWidth = QLabel(f"Window Width Value : {self.windowWidth}")
+        self.LABEL_OVERLAPPING = QLabel(f"Overlapping Value : {self.OVERLAPPING}")
+
+        self.confirm_btn = QPushButton("Slide && Export", self)
 
         # self.stress_btn = QPushButton("Stress", self)
 
         self.edf_label = QLabel("No EDF file uploaded", self)
         self.excel_label = QLabel("No Excel file uploaded", self)
+        self.savefolder_label = QLabel("No Save folder select", self)
 
         self.canvas = FigureCanvas(plt.Figure())
         self.canvasT = FigureCanvas(plt.Figure())
@@ -88,44 +86,21 @@ class MainWindow(QMainWindow):
         
         container = QWidget()
         self.patient_selector = QComboBox()
-        
-        self.Extend_btn.setStyleSheet("background-color : coral") 
-        self.QUADRANT_OFFSET_spinbox.setRange(0.5, 10.0)  
-        self.QUADRANT_OFFSET_spinbox.setSingleStep(0.5)
-        self.QUADRANT_OFFSET_spinbox.setValue(1.0)
 
-        # self.plotylimit_spinbox.setRange(0.00005, 0.005) 
-        # self.plotylimit_spinbox.setSingleStep(0.00005)
-        # self.plotylimit_spinbox.setDecimals(5)
-        # self.plotylimit_spinbox.setValue(0.0005)
-
-        # self.overlapping_spinbox.setRange(0, 1) 
-        # self.overlapping_spinbox.setSingleStep(0.05)
-        # self.overlapping_spinbox.setValue(0)
-
-        # self.plotylimit_spinbox.valueChanged.connect(self.updateylimit)
-        self.QUADRANT_OFFSET_spinbox.valueChanged.connect(self.updateQoffset)
-        # self.overlapping_spinbox.valueChanged.connect(self.updateOverlapping)
-        self.confirm_btn.clicked.connect(searchWindow.openSearchWindow)
-
-        self.uploadSubjectsFolder.clicked.connect(self.upload_folder)
-        # self.excel_upload_btn.clicked.connect(self.upload_excel_folder)
-        # self.slice_all_btn.clicked.connect(self.slice_all)
-        # self.baseline_btn.clicked.connect(lambda : self.map_segment("Baseline",1))
-        # self.simulation_btn.clicked.connect(lambda : self.map_segment("Simulate_teeth_scraping",1))
-        # self.Q1_btn.clicked.connect(lambda : self.map_segment("Q1","p"))
-        # self.Q2_btn.clicked.connect(lambda : self.map_segment("Q2","q"))
-        # self.Q3_btn.clicked.connect(lambda : self.map_segment("Q3","r"))
-        # self.Q4_btn.clicked.connect(lambda : self.map_segment("Q4","s"))
+        self.SubjectsFolder.clicked.connect(self.upload_folder)
+        self.selectSaveFolder.clicked.connect(self.setExportFolder)
         self.setting_btn.clicked.connect(self.configureSetting)
-        self.Extend_btn.clicked.connect(self.toggleExtend)
-        # self.floss_btn.clicked.connect(lambda : self.map_segment("Floss_teeth",1))
-        # self.stress_btn.clicked.connect(lambda : self.map_segment("Stress",1))
-        
-        main_layout_components = [self.uploadSubjectsFolder, self.edf_label,  self.excel_label,
-                                  self.canvas, self.canvasT, self.patientInfoTable] # self.excel_upload_btn,
+        self.confirm_btn.clicked.connect(self.startSlicing)
 
-        button_layout_components = [self.setting_btn,  
+        self.QUADRANT_OFFSET_spinbox.valueChanged.connect(self.QSPINBOX)
+        self.SUBSEGMENT_OFFSET_spinbox.valueChanged.connect(self.SSPINBOX)
+        
+        main_layout_components = [self.SubjectsFolder,self.selectSaveFolder, self.edf_label,  self.excel_label,
+                                  self.savefolder_label, self.canvas, self.canvasT, self.patientInfoTable] # self.excel_upload_btn,
+
+        button_layout_components = [self.LABEL_OFFSETQ, self.LABEL_OFFSETSS, 
+                                     self.LABEL_OVERLAPPING, 
+                                    self.setting_btn,  
                     # self.ylimit_label, self.plotylimit_spinbox, 
                     self.confirm_btn] # self.overlapping_label, self.overlapping_spinbox ,self.slice_all_btn, self.baseline_btn, self.simulation_btn, self.Q1_btn, self.Q2_btn,
                     # self.Q3_btn, self.Q4_btn, self.floss_btn,
@@ -140,31 +115,137 @@ class MainWindow(QMainWindow):
         container.setLayout(layout)
         self.setCentralWidget(container)
 
-    def configureSetting(self):
-        global settingWindow
-        settinglayout = QVBoxLayout()
-        settingWindow = QWidget()
+    def QSPINBOX(self):
+        self.STRESS_QUADRANT_OFFSET = np.round(self.QUADRANT_OFFSET_spinbox.value(),2)
+        self.LABEL_OFFSETQ.setText(f"Quadrant Offset Value : {self.STRESS_QUADRANT_OFFSET}")
+
+    def SSPINBOX(self):
+        self.STRESS_SUBSEGMENT_OFFSET = np.round(self.SUBSEGMENT_OFFSET_spinbox.value(),2)
+        self.LABEL_OFFSETSS.setText(f"Subsegment Offset Value : {self.STRESS_SUBSEGMENT_OFFSET}")
+
+    def startSlicing(self):
+        self.start_time = time.time()
+        print("Start Slicing!")
         
+        if self.subjectsfolder:
+            # loop through each patient
+            for subject_folder in os.listdir(self.subjectsfolder): 
+                subject_path = os.path.join(self.subjectsfolder, subject_folder)
 
-        settingWindow.setWindowTitle(f"Slide Setting")
-        settingWindow.setGeometry(100, 100, 320, 280)
+                if os.path.isdir(subject_path):
+                    edf_files = [f for f in os.listdir(subject_path) if f.endswith(".edf")]
+                    xlsx_files = [f for f in os.listdir(subject_path) if f.endswith(".xlsx")]
 
-        ww_label = QLabel("Window Width (second): ", self)
-        ww_edit = QLineEdit()
+                    if not edf_files:
+                        print(f"No EDF files found in {subject_folder}")
+                        continue
+                    
+                    edf_file = edf_files[0] # get only first edf
+                    self.edf_file_path = os.path.join(subject_path, edf_file)
+                    print(f"Processing EDF File: {self.edf_file_path} in {subject_folder}")
+                    
+                    subject_id = re.search(r'Subject(\d+)', self.edf_file_path).group(1)
+                    self.patient_data[subject_id] = mne.io.read_raw_edf(self.edf_file_path, preload=True)
+                    
+                    self.plot_edf_data(subject_id)
+                    self.patient_selector.addItem(subject_id)
+
+                    if not xlsx_files:
+                        print(f"No xlsx files found in {subject_folder}")
+                        continue
+                    
+                    for xlsx_file in xlsx_files:
+                        fullxlsx_path = os.path.join(subject_path, xlsx_file)
+                        print(f"Processing xlsx File: {xlsx_file} in {subject_folder}")
+                        fullxlsx_path = os.path.normpath(fullxlsx_path)
+                        self.excel_file_path = fullxlsx_path
+
+                        # print(self.excel_file_path)
+                        self.trigger_data[subject_id] = pd.read_excel(fullxlsx_path, engine='openpyxl')
+                    
+                    
+                        
+                    self.plot_trigger(subject_id)
+                    self.slice_all()
+
+                self.minStressLength = float("inf") # reset min stress length of patient
+                print(f"Patient {subject_id} processed")
+            self.edf_label.setText(f"Processed EDF files from {self.subjectsfolder}")
+            self.excel_label.setText(f"Processed xlsx files from {self.subjectsfolder}")
+            print("All patients processed.")
+            print("--- RUNTIME : %.2f seconds ---" % (time.time() - self.start_time))
+
+    def setExportFolder(self):
+        if self.save_folder_path is None:
+            self.save_folder_path = QFileDialog.getExistingDirectory(self, "Select Output Folder")
+            if not self.save_folder_path:
+                print("No save folder selected.")
+                return
+            
+            print("+" *20)
+            print("Selected output folder TO ", self.save_folder_path)
+            print("+" *20) 
+            self.savefolder_label.setText(f"Set Export Folder to {self.save_folder_path}")
+            
+    def configureSetting(self):
+        
+        if hasattr(self, 'settingWindow') and self.settingWindow:
+                self.settingWindow.show()
+                return
+
+        settinglayout = QVBoxLayout()
+        self.settingWindow = QWidget()
+
+        self.patient_selector_label = QLabel("Patient Selected : ", self)
+
+        self.settingWindow.setWindowTitle(f"Slide Setting")
+        self.settingWindow.setGeometry(100, 100, 220, 280)
+
+        ww_label = QLabel("Window Width (second): (No input req. for trad. method)", self)
+        ww_edit = QLineEdit("windowWidth", self)
         op_label = QLabel("Overlapping (0-100) :", self)
-        op_edit = QLineEdit()
+        self.op_edit = QLineEdit(self)
         confirm_btn = QPushButton("Confirm Setting", self)
         
-        widgets = [self.patient_selector, self.Extend_btn, self.QUADRANT_OFFSET_spinbox, ww_label, ww_edit, op_label, op_edit, confirm_btn]
+        self.overlapping_lineedit = QLineEdit()
+
+        self.QUADRANT_OFFSET_spinbox.setRange(0, 10.0)  
+        self.QUADRANT_OFFSET_spinbox.setSingleStep(0.05)
+        self.QUADRANT_OFFSET_spinbox.setValue(1.0) 
+
+        self.SUBSEGMENT_OFFSET_spinbox.setRange(0, 10.0)  
+        self.SUBSEGMENT_OFFSET_spinbox.setSingleStep(0.05)
+        self.SUBSEGMENT_OFFSET_spinbox.setValue(0.5)
+
+        if not hasattr(self, 'patient_selector'):
+            self.patient_selector = QComboBox(self)
+
+        widgets = [self.patient_selector_label, self.patient_selector, self.extendQ_label,
+                    self.QUADRANT_OFFSET_spinbox, self.extendSS_label , self.SUBSEGMENT_OFFSET_spinbox,
+                    ww_label, ww_edit, op_label, self.op_edit, confirm_btn]
         
+        confirm_btn.clicked.connect(self.confirmSetting)
+
+        for widget in widgets:
+            settinglayout.addWidget(widget)
+
+        self.settingWindow.setLayout(settinglayout)
+        self.settingWindow.show()
+    
+    def upload_folder(self):
+        folder_dialog = QFileDialog()
+        self.subjectsfolder = folder_dialog.getExistingDirectory(self, "Select Folder Containing Subject Folders")
+                
+        self.patient_selector.clear() # when upload new patient set
+        print("Uploaded subject folder: ", self.subjectsfolder)
+        self.edf_label.setText(f"Loaded EDF file")
+        self.excel_label.setText(f"Loaded xlsx file")
+
+
+    def confirmSetting(self):
         self.patient_selector.currentIndexChanged.connect(self.update_plots)
-
-        for i in widgets:
-            settinglayout.addWidget(i)
-
-
-        settingWindow.setLayout(settinglayout)
-        settingWindow.show()
+        self.updateOverlapping()
+        self.settingWindow.close()
     
     def update_plots(self):
         subject_id = self.patient_selector.currentData()
@@ -189,9 +270,11 @@ class MainWindow(QMainWindow):
         self.patientInfoTable.setItem(   # Length datapoint
             self.patientNo, 2, QTableWidgetItem( str(patient.full_raw.shape[1])))
         self.patientInfoTable.setItem(   # Length second
-            self.patientNo, 3, QTableWidgetItem( str(  np.round((patient.full_raw.shape[1] / self.SAMPLING_FREQUENCY),2)   )))
+            self.patientNo, 3, QTableWidgetItem( str(  np.round((patient.full_raw.shape[1] / 
+                                                                 self.SAMPLING_FREQUENCY),2)   )))
         self.patientInfoTable.setItem(    
-            self.patientNo, 4, QTableWidgetItem( str(  np.round(((patient.full_raw.shape[1] / self.SAMPLING_FREQUENCY)/60),2)  )))
+            self.patientNo, 4, QTableWidgetItem( str(  np.round(((patient.full_raw.shape[1] / 
+                                                                  self.SAMPLING_FREQUENCY)/60),2)  )))
         self.patientInfoTable.setItem(
             self.patientNo, 5, QTableWidgetItem( str(patient.ch_list)))
         self.patientInfoTable.setItem(
@@ -200,10 +283,12 @@ class MainWindow(QMainWindow):
             self.patientNo, 7, QTableWidgetItem( str(patient.segments)))
         
         segment_btn = QPushButton(f"Show Segments")
-        segment_btn.clicked.connect(lambda: segmentWindow.showSegmentTable(patient.segments, patient.subject_id))
+        segment_btn.clicked.connect(lambda: segmentWindow.showSegmentTable(patient.segments, 
+                                                                           patient.subject_id))
         self.patientInfoTable.setCellWidget(self.patientNo, 7, segment_btn)
 
         self.patientNo += 1  # Move to next patient
+        
 
 # segment & plot ------------------------------------------------------------------------------------
 
@@ -218,109 +303,76 @@ class MainWindow(QMainWindow):
                 interval_datapoint = misc.convert_timescale(interval, self.SAMPLING_FREQUENCY)
                 if i ==1:
                     segmentName = "Post-Intervention" 
-                    self.cut_segment(interval_datapoint[1:], segmentName)
+                    self.cut_segment(interval_datapoint[1:], segmentName, activate)
                 else:
-                    self.cut_segment(interval_datapoint[:1], segmentName)
+                    self.cut_segment(interval_datapoint[:1], segmentName, activate)
 
         elif segmentName in ['Q1','Q2','Q3','Q4']:  
-            
             idx = np.where(self.trigger[segmentName] == activate)[0]
             interval = misc.group_number(idx) # interval 0 = Baseline, 1 = Post Intervention
             interval_datapoint = misc.convert_timescale(interval, self.SAMPLING_FREQUENCY)
 
-            # Quadrant, extend ( 1s each)
-            # Segment Offset : +- 1 s ####################################################################   
-            if self.segmentExtend: # tradtional method
-                offset = self.STRESS_QUADRANT_OFFSET * self.SAMPLING_FREQUENCY
-                print("IDP", interval_datapoint)
-                interval_datapoint[0][0] -= offset
-                interval_datapoint[0][1] += offset
-                print("IDP offset", interval_datapoint)
-            self.cut_segment(interval_datapoint, segmentName)
+            offset = self.STRESS_QUADRANT_OFFSET * self.SAMPLING_FREQUENCY
+            # print("IDP", interval_datapoint)
+            interval_datapoint[0][0] -= offset
+            interval_datapoint[0][1] += offset
+            # print("IDP offset", interval_datapoint)
+            self.cut_segment(interval_datapoint, segmentName, activate)
                 
         else :  # No extend,     # Simulation, Floss
             idx = np.where(self.trigger[segmentName]==activate)[0]
             interval = misc.group_number(idx)
             interval_datapoint = misc.convert_timescale(interval, self.SAMPLING_FREQUENCY)
-            self.cut_segment(interval_datapoint, segmentName)
+            self.cut_segment(interval_datapoint, segmentName, activate)
 
-    def cut_segment(self, interval_datapoint, segmentName):
+    def cut_segment(self, interval_datapoint, segmentName, activate):
         if self.raw is None or self.trigger is None:
             return
         
         # interval_count = len(interval_datapoint)
         # print("IntCopunt" , interval_count)
         # for i in range(interval_count):
-            # start_idx = int(interval_datapoint[i][0])
-            # stop_idx = int(interval_datapoint[i][1])
-        
         start_idx = int(interval_datapoint[0][0])
         stop_idx = int(interval_datapoint[0][1])
+    
+        # start_idx = int(interval_datapoint[0][0])
+        # stop_idx = int(interval_datapoint[0][1])
 
         self.segmentdata, self.segmentTimes = self.raw[:, start_idx:stop_idx]  # segment cut
         if(len(self.segmentTimes)!=0):
             self.segmentPoint = (self.segmentTimes - self.segmentTimes[0]) * self.SAMPLING_FREQUENCY
-
-            if( segmentName in ["Q1","Q2","Q3","Q4"] and self.segmentExtend):
-                extend = True
-                # SUBSEGMENT OFFSET : +- 0.5 s ############################################################### 
-                offset = self.STRESS_SLICE_OFFSET * self.SAMPLING_FREQUENCY
-                for i in range(2):  # 0 non stress,   # 1 :stress interval
-                    idx = np.where(self.trigger['Stress']==i)[0] 
-                    interval = misc.group_number(idx)
-                    interval_datapoint = misc.convert_timescale(interval, self.SAMPLING_FREQUENCY)
-                    
-                    if (i==0):
-                        stress_suffix = "_Non-Stress"
-                    elif (i==1):
-                        stress_suffix = "_Stress"
-
-                    for js in range(len(interval_datapoint)):
-                        interval_datapoint[js][0] -= offset
-                        interval_datapoint[js][1] += offset
-                        delete_row = []
-                    for j in range(interval_datapoint.shape[0]):
-                        intervalLength = interval_datapoint[j][1] - interval_datapoint[j][0]
-                        # print("Interval Length: ",intervalLength)
-
-                        if ( intervalLength <384): # (1.5 s)
-                            delete_row.append(j)
-
-                    interval_datapoint = np.delete(interval_datapoint, delete_row, axis=0)
-                    subSegmentName = segmentName+stress_suffix
-                    # self.cut_subSegment(subSegmentName)
-            else :
-                extend = False
+            self.cut_subSegment(segmentName, activate, self.segmentdata, self.segmentTimes)
 
             # Add segment to patient Information ##########################################################
+            if( segmentName in ["Q1","Q2","Q3","Q4"] ): # and self.segmentExtend
+                extend = True
+                segmentName = segmentName+"_Extend"
+            else :
+                extend = False
+                segmentName = segmentName+"_Intend"
+
             self.currentPatient.add_segment(segmentName, self.segmentdata, self.segmentTimes, extend, interval_datapoint)
             self.save_segment(segmentName, self.segmentdata, self.segmentTimes)
 
-        print("--- RUNTIME : %.2f seconds ---" % (time.time() - self.start_time))
 
-#########################################################################################
-    # def cut_subSegment(self, segmentName, segmentdata, segmentTimes):
+        
 
     def save_segment(self, segmentName, segmentData, segmentTimes):
         if segmentName is None:
             return
-
-        if self.save_folder_path is None:
-            self.save_folder_path = QFileDialog.getExistingDirectory(self, "Select Output Folder")
-            if not self.save_folder_path:
-                print("No save folder selected.")
-                return
-            print("+" *20)
-            print("Selected output folder TO ", self.save_folder_path)
         
-        patient_segment_folder = os.path.join(self.save_folder_path,f'Patient_{self.currentPatient.subject_id}',"Segment")
+        if  self.save_folder_path is None:
+            print("Please Select Save Folder")
+            return
+
+        patient_segment_folder = os.path.join(self.save_folder_path,f'Patient_{self.currentPatient.subject_id}', "Segment")
         
         os.makedirs(patient_segment_folder, exist_ok=True)
         save_path = os.path.join(patient_segment_folder, f'Segment_{segmentName}.json')
         n_channels = segmentData.shape[0]
 
-        print("+" *20)
-        print("SAVE ", segmentData.shape ,segmentData ," to ", save_path)
+        # print("+" *20)
+        # print("SAVE SEGMENT", segmentData.shape ," to ", save_path)
         segment_json = {
             "segment_name" : segmentName,
             "length(s)"    : np.round(segmentData.shape[1]/self.SAMPLING_FREQUENCY,2),
@@ -334,65 +386,173 @@ class MainWindow(QMainWindow):
         try:
             with open(save_path,"w") as outfile:
                 json.dump(segment_json, outfile)
-            print(f"Segment saved at: {save_path}")
+            # print(f"Segment saved at: {save_path}")
         except OSError as e:
             print(f"Error saving segment: {e}")
 
-    def save_subSegment(self, subSegmentName):
+#########################################################################################
+    def cut_subSegment(self, segmentName, activate , segmentdata, segmentTimes):
+
+        if segmentName in ['Q1','Q2','Q3','Q4']:  
+            # SUBSEGMENT OFFSET : +- 0.5 s ############################################################### 
+            offset = self.STRESS_SUBSEGMENT_OFFSET * self.SAMPLING_FREQUENCY
+            segment_start_time = segmentTimes[0]
+            start_datapoint = int(segment_start_time*self.SAMPLING_FREQUENCY)
+            # print("start datapoint :",start_datapoint)
+            # print("start time : ", segment_start_time)
+            for i in range(2):  # 0 non stress,   # 1 :stress interval
+                idx = np.where((self.trigger['Stress']==i) & (self.trigger[segmentName]==activate))[0] 
+                interval = misc.group_number(idx)
+                interval_datapoint = misc.convert_timescale(interval, self.SAMPLING_FREQUENCY)
+                
+                stress_suffix = "_Non-Stress" if i==0 else "_Stress"
+                print("#"*40)
+                print(f"Processing {stress_suffix} intervals.")
+                print("SegmentName :", segmentName)
+                print("#"*20)
+                print("Check Data BEFORE : ", segmentdata.shape)
+
+                for js in range(len(interval)):
+                    start_idx = interval_datapoint[js][0]-start_datapoint
+                    stop_idx = interval_datapoint[js][1]-interval_datapoint[js][0]+start_idx
+
+                    start_idx -= offset
+                    stop_idx += offset
+
+                    subSegmentData = segmentdata[:, int(start_idx): int(stop_idx)]
+                    subSegmentTimes = segmentTimes[ int(start_idx): int(stop_idx)]
+                    print("Check Data AFTER : ", subSegmentData.shape)
+                    
+                    subSegmentName = segmentName+stress_suffix+"_"+str(js+1)
+                    # print("SubSegnebtBane", subSegmentName)
+                    self.save_subSegment(subSegmentName, subSegmentData, subSegmentTimes)
+        elif segmentName in ["Baseline","Floss_teeth","Post-Intervention","Simulate_teeth_scraping"]:
+            subSegmentName = segmentName+"_sub"
+            # print("SubSegnebtBane", subSegmentName)
+            self.save_subSegment(subSegmentName, segmentdata, segmentTimes)
+
+    def find_min_stress_length(self):
+        segment_map = {
+        'Q1': 'p',
+        'Q2': 'q',
+        'Q3': 'r',
+        'Q4': 's'
+        }
+        
+        for segmentName, activate in segment_map.items():
+            for i in range(2):  # 0: non-stress, 1: stress intervals
+                idx = np.where((self.trigger['Stress'] == i) & (self.trigger[segmentName] == activate))[0]
+                interval = misc.group_number(idx)
+                interval_datapoint = misc.convert_timescale(interval, self.SAMPLING_FREQUENCY)
+
+                for js in range(len(interval)):
+                    start_idx = interval_datapoint[js][0]
+                    stop_idx = interval_datapoint[js][1]
+                    length = stop_idx - start_idx
+                    print("#"*20)
+                    print("start_stop " , start_idx, stop_idx)
+                    
+                    print("length ", length)
+
+                    if length < self.minStressLength:
+                        if length >= self.SAMPLING_FREQUENCY*(1.5):
+                            self.minStressLength = length
+                        print(f"Updated minStressLength to: {self.minStressLength}")
+                        self.windowWidth = self.minStressLength
+                        self.LABEL_WindowWidth.setText(f"WindowWidth : {self.windowWidth}")
+
+
+    def save_subSegment(self, subSegmentName, subSegmentData, subSegmentTimes):
         if subSegmentName is None:
             return
-
         
-            
-    def upload_folder(self):
-        folder_dialog = QFileDialog()
-        subjectsfolder = folder_dialog.getExistingDirectory(self, "Select Folder Containing Subject Folders")
-                
-        self.start_time = time.time()
-        self.patient_selector.clear()
+        self.cut_slice(subSegmentName, subSegmentData, subSegmentTimes) # send every subsegment to slicing
+        
+        if  self.save_folder_path is None:
+            print("Please Select Save Folder")
+            return
+        
+        patient_ss_folder = os.path.join(self.save_folder_path,f'Patient_{self.currentPatient.subject_id}',"SubSegment")
+        
+        os.makedirs(patient_ss_folder, exist_ok=True)
+        save_path = os.path.join(patient_ss_folder, f'SubSegment_{subSegmentName}.json')
+        n_channels = subSegmentData.shape[0]
 
-        if subjectsfolder:
-            # loop through each patient
-            for subject_folder in os.listdir(subjectsfolder): 
-                subject_path = os.path.join(subjectsfolder, subject_folder)
+        # print("+" *20)
+        # print("SAVE SUBSEGMENT", subSegmentData.shape ," to ", save_path)
+        subSegment_json = {
+            "subSegment_name" : subSegmentName,
+            "length(s)"    : np.round(subSegmentData.shape[1]/self.SAMPLING_FREQUENCY,2),
+            "data"         : subSegmentData.tolist(),
+            "times"        : subSegmentTimes.tolist(),
+            "n_chan"       : n_channels,
+            "fs"           : self.SAMPLING_FREQUENCY,
+            "shape"        : subSegmentData.shape
+        }
 
-                if os.path.isdir(subject_path):
-                    edf_files = [f for f in os.listdir(subject_path) if f.endswith(".edf")]
-                    xlsx_files = [f for f in os.listdir(subject_path) if f.endswith(".xlsx")]
+        try:
+            with open(save_path,"w") as outfile:
+                json.dump(subSegment_json, outfile)
+            # print(f"SubSegment saved at: {save_path}")
+        except OSError as e:
+            print(f"Error saving SubSegment: {e}")
 
-                    if not edf_files:
-                        print(f"No EDF files found in {subject_folder}")
-                        continue
-                    
-                    edf_file = edf_files[0] # get only first edf
-                    self.edf_file_path = os.path.join(subject_path, edf_file)
-                    print(f"Processing EDF File: {self.edf_file_path} in {subject_folder}")
-                    
-                    subject_id = re.search(r'Subject(\d+)', self.edf_file_path).group(1)
-                    self.patient_data[subject_id] = mne.io.read_raw_edf(self.edf_file_path, preload=True)
-                    self.plot_edf_data(subject_id)
+    def cut_slice(self, subSegmentName , subSegmentData, subSegmentTimes):
+        
+        data_length = subSegmentData.shape[1]
+        numWindow = np.floor(1+( data_length - self.windowWidth )/(self.windowWidth*(1-(self.OVERLAPPING/100))))
 
-                    self.patient_selector.addItem(subject_id)
+        print(f"cut slice from subsegment : {subSegmentName}")
+        print(subSegmentData.shape[1])
 
-                    if not xlsx_files:
-                        print(f"No xlsx files found in {subject_folder}")
-                        continue
-                    
-                    for xlsx_file in xlsx_files:
-                        fullxlsx_path = os.path.join(subject_path, xlsx_file)
-                        print(f"Processing xlsx File: {xlsx_file} in {subject_folder}")
-                        fullxlsx_path = os.path.normpath(fullxlsx_path)
-                        self.excel_file_path = fullxlsx_path
-                        print(self.excel_file_path)
-                        self.trigger_data[subject_id] = pd.read_excel(fullxlsx_path, engine='openpyxl')
-                    
-                    self.plot_trigger(subject_id)
-                    self.slice_all()
+        print(f"data length : {data_length}")
+        print("Slice size = smallest stress subsegment : ", self.windowWidth)
+        # print(f"Number of Slice = 1+({data_length} - {self.windowWidth})/({self.windowWidth}*(1 - ({self.OVERLAPPING}/100)))")
+        print(f"Number of Slice for {subSegmentName} is {numWindow} " )   
 
+        slicefolderName = subSegmentName+"_"+ str(numWindow)
+        patient_slice_folder = os.path.join(self.save_folder_path, f'Patient_{self.currentPatient.subject_id}', "Slice", slicefolderName)
+        
+        os.makedirs(patient_slice_folder, exist_ok=True)
 
-            self.edf_label.setText(f"Processed EDF files from {subjectsfolder}")
-            self.excel_label.setText(f"Processed xlsx files from {subjectsfolder}")
-            print("All patients processed.")
+        for i in range(int(numWindow)):
+            start_idx = int(i * self.windowWidth)
+            stop_idx = int(start_idx + self.windowWidth)
+            sliceName = subSegmentName + "_Slice_"  +str(i+1)
+
+            sliceData = subSegmentData[ :, start_idx : stop_idx]
+            sliceTimes = subSegmentTimes[ start_idx: stop_idx]
+            self.save_slice(sliceName, sliceData, sliceTimes, numWindow, patient_slice_folder)
+
+    def save_slice(self, sliceName, sliceData, sliceTimes, numWindow, patient_slice_folder):
+        if sliceName is None:
+            return
+        
+        
+        save_path = os.path.join(patient_slice_folder, f'Slice_{sliceName}.json')
+        n_channels = sliceData.shape[0]
+
+        # print("+" *20)
+        # print("SAVE SUBSEGMENT", sliceData.shape ," to ", save_path)
+        slice_json = {
+            "slice_name"   : sliceName,
+            "length(s)"    : np.round(sliceData.shape[1]/self.SAMPLING_FREQUENCY,2),
+            "totalWindow"  : numWindow,
+            "data"         : sliceData.tolist(),
+            "times"        : sliceTimes.tolist(),
+            "n_chan"       : n_channels,
+            "fs"           : self.SAMPLING_FREQUENCY,
+            "shape"        : sliceData.shape
+        }
+
+        try:
+            with open(save_path,"w") as outfile:
+                json.dump(slice_json, outfile)
+            # print(f"Slice saved at: {save_path}")
+        except OSError as e:
+            print(f"Error saving SubSegment: {e}")
+        # print("+" *20)
+
 
     def plot_edf_data(self, subject_id):
         if subject_id not in self.patient_data:
@@ -451,6 +611,10 @@ class MainWindow(QMainWindow):
         # baselineInt = 0
         self.trigger = self.trigger_data[subject_id]
 
+        if self.minStressLength > 1e6: # do it once per patient
+            self.find_min_stress_length()
+        
+
         for i in ['Baseline','Simulate_teeth_scraping','Floss_teeth']:
             # if (i=="Baseline"):
                 # baselineInt+=1
@@ -489,24 +653,18 @@ class MainWindow(QMainWindow):
 
 # UI ------------------------------------------------------------------------------------
 
-    def updateylimit(self):
-        self.ylimit = self.plotylimit_spinbox.value()
-
-    def updateQoffset(self):
-        self.STRESS_QUADRANT_OFFSET = self.STRESS_QUADRANT_OFFSET_spinbox.value()
-
     def updateOverlapping(self):
-        self.OVERLAPPING = self.overlapping_spinbox.value()
-    
-    def toggleExtend(self):
-        if  not self.segmentExtend:
-            self.Extend_btn.setText("Q-Extend")
-            self.segmentExtend = True
-            self.Extend_btn.setStyleSheet("background-color : coral") 
-        else:
-            self.Extend_btn.setText("Q-Intend")
-            self.segmentExtend = False
-            self.Extend_btn.setStyleSheet("background-color : lightblue") 
+        if self.op_edit.text() =="":
+            return
+        if (int(self.op_edit.text())<=100):
+            try :
+                    self.OVERLAPPING = int(self.op_edit.text())
+                    self.LABEL_OVERLAPPING.setText(f"Overlapping Value : {self.OVERLAPPING}")
+            except:
+                print("Invalid overlapping value.")
+        else: 
+            print("Please enter valid overlapping value. * Automatically set the overlapping to 0 *")
+        print("Set overlapping = ", self.OVERLAPPING)
             
     def slice_all(self):
         if self.raw is None or self.trigger is None:
