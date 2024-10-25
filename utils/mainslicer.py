@@ -60,7 +60,7 @@ class MainWindow(QMainWindow):
         self.SUBSEGMENT_OFFSET_spinbox = QDoubleSpinBox()
         self.LABEL_OFFSETQ = QLabel(f"Quadrant Offset Value : {self.STRESS_QUADRANT_OFFSET}")
         self.LABEL_OFFSETSS = QLabel(f"Subsegment Offset Value : {self.STRESS_SUBSEGMENT_OFFSET}")
-        self.LABEL_WindowWidth = QLabel(f"Window Width Value : {self.windowWidth}")
+        # self.LABEL_WindowWidth = QLabel(f"Window Width Value : {self.windowWidth}")
         self.LABEL_OVERLAPPING = QLabel(f"Overlapping Value : {self.OVERLAPPING}")
 
         self.confirm_btn = QPushButton("Slide && Export", self)
@@ -99,7 +99,7 @@ class MainWindow(QMainWindow):
                                   self.savefolder_label, self.canvas, self.canvasT, self.patientInfoTable] # self.excel_upload_btn,
 
         button_layout_components = [self.LABEL_OFFSETQ, self.LABEL_OFFSETSS, 
-                                     self.LABEL_OVERLAPPING, 
+                                     self.LABEL_OVERLAPPING, # self.LABEL_WindowWidth,
                                     self.setting_btn,  
                     # self.ylimit_label, self.plotylimit_spinbox, 
                     self.confirm_btn] # self.overlapping_label, self.overlapping_spinbox ,self.slice_all_btn, self.baseline_btn, self.simulation_btn, self.Q1_btn, self.Q2_btn,
@@ -162,8 +162,6 @@ class MainWindow(QMainWindow):
 
                         # print(self.excel_file_path)
                         self.trigger_data[subject_id] = pd.read_excel(fullxlsx_path, engine='openpyxl')
-                    
-                    
                         
                     self.plot_trigger(subject_id)
                     self.slice_all()
@@ -459,8 +457,8 @@ class MainWindow(QMainWindow):
                             self.minStressLength = length
                         print(f"Updated minStressLength to: {self.minStressLength}")
                         self.windowWidth = self.minStressLength
-                        self.LABEL_WindowWidth.setText(f"WindowWidth : {self.windowWidth}")
-
+                        # self.LABEL_WindowWidth.setText(f"WindowWidth : {self.windowWidth}")
+                        print("Slice size = smallest stress subsegment : ", self.windowWidth)
 
     def save_subSegment(self, subSegmentName, subSegmentData, subSegmentTimes):
         if subSegmentName is None:
@@ -472,7 +470,8 @@ class MainWindow(QMainWindow):
             print("Please Select Save Folder")
             return
         
-        patient_ss_folder = os.path.join(self.save_folder_path,f'Patient_{self.currentPatient.subject_id}',"SubSegment")
+        patient_ss_folder = os.path.join(self.save_folder_path,f'Patient_{self.currentPatient.subject_id}'
+                                         ,"SubSegment")
         
         os.makedirs(patient_ss_folder, exist_ok=True)
         save_path = os.path.join(patient_ss_folder, f'SubSegment_{subSegmentName}.json')
@@ -500,23 +499,27 @@ class MainWindow(QMainWindow):
     def cut_slice(self, subSegmentName , subSegmentData, subSegmentTimes):
         
         data_length = subSegmentData.shape[1]
-        numWindow = np.floor(1+( data_length - self.windowWidth )/(self.windowWidth*(1-(self.OVERLAPPING/100))))
+        overlap_offset = int(self.windowWidth * (self.OVERLAPPING / 100.0))
+        numWindow = int((len(subSegmentTimes) - overlap_offset) // (self.windowWidth - overlap_offset))
 
         print(f"cut slice from subsegment : {subSegmentName}")
         print(subSegmentData.shape[1])
 
         print(f"data length : {data_length}")
-        print("Slice size = smallest stress subsegment : ", self.windowWidth)
+        
         # print(f"Number of Slice = 1+({data_length} - {self.windowWidth})/({self.windowWidth}*(1 - ({self.OVERLAPPING}/100)))")
         print(f"Number of Slice for {subSegmentName} is {numWindow} " )   
+        
+
 
         slicefolderName = subSegmentName+"_"+ str(numWindow)
-        patient_slice_folder = os.path.join(self.save_folder_path, f'Patient_{self.currentPatient.subject_id}', "Slice", slicefolderName)
+        slicefolderWW = "Slice_WW_" + str(self.windowWidth) + "_OV_" + str(self.OVERLAPPING)
+        patient_slice_folder = os.path.join(self.save_folder_path, f'Patient_{self.currentPatient.subject_id}', slicefolderWW, slicefolderName)
         
         os.makedirs(patient_slice_folder, exist_ok=True)
 
         for i in range(int(numWindow)):
-            start_idx = int(i * self.windowWidth)
+            start_idx = int(i * (self.windowWidth - overlap_offset))
             stop_idx = int(start_idx + self.windowWidth)
             sliceName = subSegmentName + "_Slice_"  +str(i+1)
 
@@ -527,7 +530,6 @@ class MainWindow(QMainWindow):
     def save_slice(self, sliceName, sliceData, sliceTimes, numWindow, patient_slice_folder):
         if sliceName is None:
             return
-        
         
         save_path = os.path.join(patient_slice_folder, f'Slice_{sliceName}.json')
         n_channels = sliceData.shape[0]
